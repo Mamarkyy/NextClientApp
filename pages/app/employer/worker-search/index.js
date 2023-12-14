@@ -14,8 +14,9 @@ import { MultiSelect } from "primereact/multiselect";
 import { MultiStateCheckbox } from "primereact/multistatecheckbox";
 import axios from "axios";
 import EmployerNavbar from "@/layout/EmployerNavbar";
-import ShowWorkerDetailsBtn from "@/layout/components/employer/worker-search/ShowWorkerDetailsBtn";
+import ShowWorkerDetailsBtn from "@/layout/components/employer/worker-search/worker-details/ShowWorkerDetailsBtn";
 import { LocationService } from "@/layout/service/LocationService";
+import { getTotalAverageRating } from "@/layout/components/utils/ratingreviewutils";
 
 export default function WorkerSearchPage() {
   const { data: session, status: sessionStatus } = useSession();
@@ -97,11 +98,11 @@ export default function WorkerSearchPage() {
 
   const starsOptions = [
     {
-      value: "Shortest",
+      value: "Highest",
       icon: "pi pi-sort-amount-down",
     },
     {
-      value: "Longest",
+      value: "Shortest",
       icon: "pi pi-sort-amount-up",
     },
   ];
@@ -124,6 +125,10 @@ export default function WorkerSearchPage() {
   // }, [sessionStatus, session, router]);
 
   useEffect(() => {
+    if (!session) {
+      return;
+    }
+
     const fetchWorkers = async () => {
       const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL;
       try {
@@ -196,6 +201,11 @@ export default function WorkerSearchPage() {
     switch (activeSortOption) {
       case "Bookings":
         // TODO: Implement sorting by date range
+        if (sortSelectBookings === "Highest") {
+          filteredWorkers.sort((a, b) => b.booking_count - a.booking_count);
+        } else if (sortSelectBookings === "Lowest") {
+          filteredWorkers.sort((a, b) => a.booking_count - b.booking_count);
+        }
 
         break;
       case "Distance":
@@ -218,6 +228,22 @@ export default function WorkerSearchPage() {
         break;
       case "Stars":
         // TODO: Implement sorting by duration
+        if (sortSelectStars === "Shortest") {
+          filteredWorkers.sort((a, b) => {
+            const avgStarsA = getTotalAverageRating(a);
+            const avgStarsB = getTotalAverageRating(b);
+            return avgStarsA - avgStarsB;
+          });
+
+          console.log("Shortest: ", filteredWorkers);
+        } else if (sortSelectStars === "Highest") {
+          filteredWorkers.sort((a, b) => {
+            const avgStarsB = getTotalAverageRating(b);
+            const avgStarsA = getTotalAverageRating(a);
+            return avgStarsB - avgStarsA;
+          });
+          console.log("highest: ", filteredWorkers);
+        }
 
         break;
       default:
@@ -294,14 +320,16 @@ export default function WorkerSearchPage() {
 
   const ServicesTemplate = (worker) => {
     return (
-      <div className="col flex flex-wrap">
+      <div className="col flex flex-wrap gap-2">
         {worker.services &&
           worker.services.map((service) => (
-            <Tag
-              key={service.service_id}
-              className="mr-2"
-              value={service.service_name}
-            />
+            <div key={service.service_id}>
+              <Tag
+                key={service.service_id}
+                className=""
+                value={service.service_name}
+              />
+            </div>
           ))}
       </div>
     );
@@ -310,38 +338,56 @@ export default function WorkerSearchPage() {
   const itemTemplate = (worker) => {
     return (
       <div className="p-col-12 p-md-3 px-3 pb-4 col lg:col-6">
-        <div className="card grid col">
+        <div className="card grid col h-full">
           <div className="col-12 flex">
-            <div className="pr-3">
-              {/* <img src="/layout/profile-default.png" alt={worker.first_name} width={'80px'} /> */}
-              <Avatar
-                image={worker.profile_url || "/layout/profile-default.png"}
-                alt="profile"
-                shape="circle"
-                className="h-8rem w-8rem md:w-8rem md:h-8rem shadow-2 cursor-pointer"
-              />
-            </div>
-            <div className="">
-              <h4 className="mb-2">
-                {worker.first_name + " " + worker.last_name}
-              </h4>
-              <Rating
-                className="mb-2"
-                value={0}
-                readOnly
-                stars={5}
-                cancel={false}
-              />
-              <div className="rate text-lg font-semibold">
-                ₱{worker.hourly_rate}/hr
+            <div className="flex">
+              <div className="pr-3">
+                {/* <img src="/layout/profile-default.png" alt={worker.first_name} width={'80px'} /> */}
+                <Avatar
+                  image={worker.profile_url || "/layout/profile-default.png"}
+                  alt="profile"
+                  shape="circle"
+                  className="h-7rem w-7rem shadow-2 cursor-pointer"
+                />
               </div>
-              {/* <span className="p-tag p-tag-success">{worker.category}</span> */}
+              <div className="w-full mr-2">
+                <h4 className="w-full mb-2 ">
+                  {worker.first_name + " " + worker.last_name}
+                </h4>
+                <div className="flex items-center gap-2 mb-2">
+                  <Rating
+                    className=""
+                    value={getTotalAverageRating(worker)}
+                    readOnly
+                    stars={5}
+                    cancel={false}
+                    pt={{
+                      onIcon: {
+                        className: "text-orange-400",
+                      },
+                    }}
+                  />
+                  <span className="text-sm">({worker.reviews.length})</span>
+                </div>
+                <div className="number-of-bookings ">
+                  <span className="">
+                    <i className="pi pi-users mr-1"></i>
+                    {worker.booking_count}{" "}
+                    {worker.booking_count > 1 ? "bookings" : "booking"}
+                  </span>
+                </div>
+                <div className="rate text-lg font-semibold">
+                  ₱{worker.hourly_rate}/hr
+                </div>
+                {/* <span className="p-tag p-tag-success">{worker.category}</span> */}
+              </div>
             </div>
-            <div className="ml-auto flex flex-column justify-content-between">
-              <Button label="Hire" className="p-button-sm p-button-primary" />
+            <div className="flex flex-column gap-2 w-8">
+              <Button label="Hire" className="p-button-sm p-button-primary " />
               <ShowWorkerDetailsBtn worker={worker} distances={distances} />
             </div>
           </div>
+
           <div className="location col-12">
             <span className="pi pi-map-marker"></span>
             <span className="ml-2">
@@ -370,7 +416,7 @@ export default function WorkerSearchPage() {
                         </div> */}
             <ServicesTemplate services={worker.services} />
           </div>
-          <div className="bio col-12 ">
+          <div className="bio col-12">
             <span className="worker-bio">{worker.bio}</span>
           </div>
         </div>
@@ -467,7 +513,7 @@ export default function WorkerSearchPage() {
                   options={starsOptions}
                   optionValue="value"
                   onChange={(e) => handleCheckboxChange("Stars", e.value)}
-                  disabled // disable duration sorting for now
+                  // disabled // disable duration sorting for now
                 />
                 <span className="vertical-align-middle ml-2">
                   Stars {sortSelectStars ? `(${sortSelectStars})` : "(none)"}

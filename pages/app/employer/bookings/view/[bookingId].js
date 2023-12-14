@@ -1,4 +1,5 @@
 import EmployerNavbar from "@/layout/EmployerNavbar";
+import Footer from "@/layout/Footer";
 import BookingViewContent from "@/layout/components/employer/bookings/view/BookingViewContent";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
@@ -17,7 +18,8 @@ const BookingView = () => {
   return (
     <div className="bg-white">
       <EmployerNavbar session={session} />
-      <BookingViewContent booking={booking} />
+      <BookingViewContent />
+      <Footer />
     </div>
   );
 };
