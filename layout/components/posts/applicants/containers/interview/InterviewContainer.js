@@ -19,10 +19,12 @@ import { Toast } from "primereact/toast";
 import { ApplicationStageServices } from "@/layout/service/ApplicationStageService";
 import { ScreeningService } from "@/layout/service/ScreeningService";
 import { InterviewService } from "@/layout/service/InterviewService";
+import { SelectButton } from "primereact/selectbutton";
 
 export default function InterviewContainer({
   applicants,
   postId,
+  session,
   distances,
   setInterviewResults,
   setHasInterview,
@@ -31,8 +33,7 @@ export default function InterviewContainer({
   const [bestCandidate, setBestCandidate] = useState();
   const [completedApplicants, setCompletedApplicants] = useState([]); // TODO: filter applicants based on interview date and time
   const [scheduledApplicants, setScheduledApplicants] = useState([]); // TODO: filter applicants based on interview date and time
-  const [unScheduledApplicants, setUnScheduledApplicants] =
-    useState(applicants); // TODO: filter applicants based on interview date and time
+  const [unScheduledApplicants, setUnScheduledApplicants] = useState([]); // TODO: filter applicants based on interview date and time
   const [nonInterviewedApplicants, setNonInterviewedApplicants] = useState([]); // TODO: filter applicants based on interview date and time
   const [interviewedApplicants, setInterviewedApplicants] = useState([]); // TODO: filter applicants based on interview date and time
   const [visibleApplicants, setVisibleApplicants] = useState(
@@ -51,6 +52,7 @@ export default function InterviewContainer({
   const [currentView, setCurrentView] = useState("scheduled"); // Default to "scheduled"
 
   const [showAll, setShowAll] = useState(false);
+  const [interviewType, setInterviewType] = useState("Google Meet");
 
   const dateConverter = DateConverter();
   const op = useRef(null);
@@ -58,14 +60,15 @@ export default function InterviewContainer({
   const toastRef = useRef(null);
 
   const applicantMenuItems = [
-    // {
-    //   label: "Edit",
-    //   icon: "pi pi-pencil",
-    //   command: () => {},
-    // },
-
     {
-      label: "Cancel",
+      label: "Mark Complete",
+      icon: "pi pi-check",
+      command: () => {
+        onCompleteInterview();
+      },
+    },
+    {
+      label: "Cancel Interview",
       icon: "pi pi-times",
       command: () => {
         onCancelInterview();
@@ -75,13 +78,25 @@ export default function InterviewContainer({
       label: "View Profile",
       icon: "pi pi-user",
     },
+  ];
+
+  const completedMenuItems = [
     {
-      label: "Mark as complete",
-      icon: "pi pi-check",
+      label: "Cancel Completion",
+      icon: "pi pi-times",
       command: () => {
-        onCompleteInterview();
+        onCancelInterview();
       },
     },
+    {
+      label: "View Profile",
+      icon: "pi pi-user",
+    },
+  ];
+
+  const interviewCallOptions = [
+    { icon: "pi pi-google", value: "Google Meet" },
+    { icon: "pi pi-video", value: "KasambahayKo" },
   ];
 
   const handleBestCandidateChange = () => {
@@ -101,6 +116,41 @@ export default function InterviewContainer({
     // TODO: handle form submission
   };
 
+  function randomID(len) {
+    let result = "";
+    if (result) return result;
+    var chars =
+        "12345qwertyuiopasdfgh67890jklmnbvcxzMNBVCZXASDQWERTYHGFUIOLKJP",
+      maxPos = chars.length,
+      i;
+    len = len || 5;
+    for (i = 0; i < len; i++) {
+      result += chars.charAt(Math.floor(Math.random() * maxPos));
+    }
+    return result;
+  }
+
+  const handleInterviewTypeChange = () => {
+    console.log(candidateForInterview);
+
+    // toggle interview type
+    setInterviewType((prevType) =>
+      prevType === "Google Meet" ? "KasambahayKo" : "Google Meet"
+    );
+
+    // reset interview link
+    setInterviewLink("");
+
+    // if kasambahayko, set interview link to kasambahayko link
+    if (interviewType === "Google Meet") {
+      const ranId = randomID(6);
+
+      // generate a unique link for the interview
+      const link = `${process.env.NEXT_PUBLIC_KASAMBAHAYKO_URL}/app/interview/${ranId}`;
+
+      setInterviewLink(link);
+    }
+  };
   const handleMenuRef = (event, candidate) => {
     // console.log("Canceling interview for: ", index);
     setCandidateForCancel(candidate);
@@ -319,14 +369,18 @@ export default function InterviewContainer({
   }
 
   const fetchScheduledApplicants = async () => {
+    if (!postId && !applicants && applicants.length === 0) {
+      return;
+    }
+
     // Fetch the latest scheduled applicants from the database/API
-    const scheduledApplicants = await InterviewService.getScheduledInterviews(
+    const schedApplicants = await InterviewService.getScheduledInterviews(
       postId
     ); // This only returns interview date details
 
     // assign applicants information to scheduled applicants
     // assign interview date and time to applicants
-    scheduledApplicants.forEach((scheduledApplicant, index) => {
+    schedApplicants.forEach((scheduledApplicant, index) => {
       const applicant = applicants.find(
         (applicant) =>
           applicant.application_id === scheduledApplicant.application_id
@@ -338,12 +392,12 @@ export default function InterviewContainer({
         applicant.interview = interviewData;
 
         // Update the properties of the found scheduled applicant
-        scheduledApplicants[index] = applicant;
+        schedApplicants[index] = applicant;
       }
     });
 
     // set scheduled applicants
-    setScheduledApplicants([...scheduledApplicants]);
+    setScheduledApplicants([...schedApplicants]);
 
     // Fetch the latest screening results from the database/API
     const screenedResults = await ScreeningService.getScreeningResults(postId);
@@ -357,12 +411,13 @@ export default function InterviewContainer({
     // Get the applicants that passed the screening stage but are not yet scheduled for interview
     const unscheduledPassedScreeningApplicants = passedApplicants.filter(
       (passedApplicant) =>
-        !scheduledApplicants.some(
+        !schedApplicants.some(
           (scheduledApplicant) =>
-            scheduledApplicant.information.email ===
-            passedApplicant.worker.email
+            scheduledApplicant.information.email == passedApplicant.worker.email
         )
     );
+
+    // console.log(screenedResults);
 
     // get the information of the unscheduled applicants from the applicants list using the unscheduled passed screening applicants
     const finalUnscheduledApplicants = unscheduledPassedScreeningApplicants.map(
@@ -380,9 +435,7 @@ export default function InterviewContainer({
 
   useEffect(() => {
     // Fetch scheduled applicants when the component mounts
-    if (postId && applicants && applicants.length > 0) {
-      fetchScheduledApplicants();
-    }
+    fetchScheduledApplicants();
   }, [postId, applicants]);
 
   useEffect(() => {
@@ -524,15 +577,26 @@ export default function InterviewContainer({
       return <span style={{ textDecoration: "line-through" }}>{date.day}</span>;
     }
 
+    // console.log(scheduledApplicants);
+
     // check if date has interview by matching day and month and year
-    const hasInterview = scheduledApplicants.some(
+    // const hasInterview = scheduledApplicants.some(
+    //   (applicant) =>
+    //     dayjs(applicant.interview.date).format("D") == date.day &&
+    //     dayjs(applicant.interview.date).format("M") == date.month + 1 &&
+    //     dayjs(applicant.interview.date).format("YYYY") == date.year
+    // );
+
+    // get the interview details of the applicant
+    const applicant = scheduledApplicants.find(
       (applicant) =>
         dayjs(applicant.interview.date).format("D") == date.day &&
         dayjs(applicant.interview.date).format("M") == date.month + 1 &&
         dayjs(applicant.interview.date).format("YYYY") == date.year
     );
 
-    if (hasInterview) {
+    // check if applicant has interview and interview is not yet completed
+    if (applicant && applicant.interview.status !== "completed") {
       return (
         <div className="flex flex-column items-center border-none">
           <span className="text-base">{date.day}</span>
@@ -569,19 +633,19 @@ export default function InterviewContainer({
       <div className="flex items-center">
         <img
           className="h-10 flex-none rounded-full bg-gray-50 mr-4"
-          src={rowData.information.profile_url}
+          src={rowData?.information?.profile_url}
           alt=""
         />
         <div className="min-w-0 flex-auto flex flex-column">
           <span className="flex">
             <p className="m-0 mr-2 text-sm font-semibold leading-6 text-gray-900">
-              {rowData.information.first_name +
+              {rowData?.information?.first_name +
                 " " +
-                rowData.information.last_name}
+                rowData?.information?.last_name}
             </p>
           </span>
           <span className="truncate text-xs leading-5 text-gray-500 align-middle">
-            {rowData.information.email}
+            {rowData?.information?.email}
           </span>
         </div>
       </div>
@@ -636,8 +700,11 @@ export default function InterviewContainer({
 
     const isInterviewPassed = interviewDateTime.isBefore(dayjs());
 
-    // Apply a CSS class conditionally based on whether the interview has passed
-    const dateClassName = isInterviewPassed ? "text-red-300" : "text-gray-500";
+    // Apply a CSS class conditionally based on whether the interview has passed and has been marked as passed
+    const dateClassName =
+      isInterviewPassed && applicant.interview.status !== "completed"
+        ? "text-red-300"
+        : "text-gray-500";
 
     // console.log(isInterviewPassed);
 
@@ -665,7 +732,7 @@ export default function InterviewContainer({
   return (
     <div>
       <Toast ref={toastRef} position="bottom-right" />
-      <div className="bg-primary-100 flex items-center justify-between p-2 pl-3 rounded-md mb-3">
+      {/* <div className="bg-primary-100 flex items-center justify-between p-2 pl-3 rounded-md mb-3">
         <p className=" text-lg font-bold m-0">
           <i className="pi pi-check-square mr-3 text-green-700"></i>
           ALL INTERVIEWS COMPLETED!
@@ -679,7 +746,7 @@ export default function InterviewContainer({
           // disabled
           // onClick={handleMoveToNextTab}
         />
-      </div>
+      </div> */}
       <div className="flex flex-column md:flex-row gap-x-5">
         <div className="flex-grow divide-y-2">
           <div className="pb-2">
@@ -762,12 +829,17 @@ export default function InterviewContainer({
                                 </div>
                               </div>
                               <Menu
-                                model={applicantMenuItems}
+                                model={
+                                  applicant.interview.status === "completed"
+                                    ? completedMenuItems
+                                    : applicantMenuItems
+                                }
                                 popup
                                 ref={menuRef}
                                 id="popup_menu_applicants"
                                 className="w-auto"
                               />
+
                               <i
                                 className="pi pi-ellipsis-v p-2 ml-3 text-xs cursor-pointer"
                                 onClick={(e) => handleMenuRef(e, applicant)}
@@ -828,112 +900,10 @@ export default function InterviewContainer({
           <div
             className={`flex flex-column divide-y-2 ${styles.calendarWrapper}`}
           >
-            <div className="pb-2">
-              <div className="flex justify-between">
-                <span className="text-base w-full font-semibold leading-6 text-gray-900">
-                  Best Candidate:
-                </span>
-                <span
-                  className="cursor-pointer ml-2 text-lg items-center"
-                  onClick={onResetBestCandidate}
-                >
-                  <i className="pi pi-replay "></i>
-                </span>
-              </div>
-              {bestCandidate ? (
-                <div className="flex items-center gap-x-4 py-4">
-                  <img
-                    className="h-12 flex-none rounded-full bg-gray-50"
-                    src={bestCandidate.information.profile_url}
-                    alt=""
-                  />
-                  <div className="min-w-0 flex-auto">
-                    <span className="flex flex-column">
-                      <p className="m-0 mr-2 text-base font-semibold leading-6 text-gray-900 truncate">
-                        {bestCandidate.information.first_name +
-                          " " +
-                          bestCandidate.information.last_name}
-                      </p>
-                      <span className="truncate text-xs leading-5 text-gray-500 align-middle">
-                        {bestCandidate.information.email}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="hidden shrink-0 sm:flex sm:flex-col sm:items-end text-right">
-                    {/* Change Button */}
-                    <span
-                      onClick={handleBestCandidateChange}
-                      className="rounded-md text-sm px-4 py-1.5 bg-gray-100 hover:bg-gray-200 font-semibold leading-6 text-gray-800 cursor-pointer"
-                    >
-                      Change
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={handleBestCandidateChange}
-                  className="mt-2 mb-1 flex align-center gap-4 text-left w-full rounded-md text-lg px-4 py-3 bg-gray-100 hover:bg-gray-200 font-semibold leading-6 text-gray-800 cursor-pointer"
-                >
-                  <div className="my-auto">
-                    <span className="pi pi-plus rounded-full bg-gray-600 p-3"></span>
-                  </div>
-                  <div>
-                    <span className="m-0 font-medium">Select a Candidate</span>
-                    <p className="m-0 text-sm font-light leading-6 text-gray-500">
-                      No best candidate selected.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <Dialog
-                header="Select Candidate from Completed Interviews"
-                visible={bestCandidateVisible}
-                onHide={() => setBestCandidateVisible(false)}
-                className="w-1/2"
-              >
-                {scheduledApplicants
-                  .filter(
-                    (applicant) => applicant.interview.status === "completed"
-                  )
-                  .map((applicant) => {
-                    return (
-                      <div
-                        className="flex items-center gap-x-4 py-4"
-                        // onClick={() => setBestCandidate(applicant)}
-                      >
-                        <img
-                          className="h-12 flex-none rounded-full bg-gray-50"
-                          src={applicant.information.profile_url}
-                          alt=""
-                        />
-                        <div className="min-w-0 flex-auto">
-                          <span className="flex flex-column">
-                            <p className="m-0 mr-2 text-base font-semibold leading-6 text-gray-900">
-                              {applicant.information.first_name +
-                                " " +
-                                applicant.information.last_name}
-                            </p>
-                            <span className="truncate text-xs leading-5 text-gray-500 align-middle">
-                              {applicant.information.email}
-                            </span>
-                          </span>
-                        </div>
-                        <div className="hidden shrink-0 sm:flex sm:flex-col sm:items-end text-right">
-                          {/* Change Button */}
-                          <span
-                            onClick={() => onBestCandidateSelect(applicant)}
-                            className="rounded-md text-sm px-4 py-1.5 bg-gray-100 hover:bg-gray-200 font-semibold leading-6 text-gray-800 cursor-pointer"
-                          >
-                            Change
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </Dialog>
-            </div>
             <div className="flex flex-column">
+              <span className="text-base w-full font-semibold leading-6 text-gray-900">
+                Schedule Overview:
+              </span>
               <Calendar
                 // value={interviewDate}
                 // onChange={handleDateChange}
@@ -994,23 +964,38 @@ export default function InterviewContainer({
               </div>
               <div className="flex flex-column gap-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="text-sm font-semibold leading-6 text-gray-900">
-                    Interview Link
-                  </label>
-                  <a
-                    target="_blank"
-                    href="https://meet.google.com/"
-                    rel="noopener noreferrer"
+                  <div className="flex align-items-center gap-2">
+                    <img
+                      src={
+                        interviewType === "Google Meet"
+                          ? "/layout/google_meet_icon_short.png"
+                          : "/layout/kasambahayko_logo.png"
+                      }
+                      alt="Sakai Logo"
+                      height={interviewType === "Google Meet" ? "20" : "20"}
+                      width={interviewType === "Google Meet" ? "20" : "20"}
+                      className="user-avatar mr-0 lg:mr-2"
+                    />
+                    <label className="text-sm font-semibold leading-6 text-gray-900">
+                      Interview type
+                    </label>
+                  </div>
+
+                  <span
+                    className="cursor-pointer"
+                    onClick={() => handleInterviewTypeChange()}
                   >
-                    <i className="pi pi-video" />
-                  </a>
+                    <i className="pi pi-arrow-right-arrow-left" />
+                  </span>
                 </div>
                 <span className="p-input-icon-left">
                   <i className="pi pi-link" />
-                  {/* TODO: CUSTOMIZE THE CALENDAR TO SHOW THE SCHEDULED INTERVIEW*/}
                   <InputText
+                    value={interviewLink}
                     placeholder=""
                     onChange={(e) => setInterviewLink(e.target.value)}
+                    // disabled if interview type is kasambahayko because link is auto generated
+                    disabled={interviewType === "KasambahayKo"}
                   />
                 </span>
               </div>
@@ -1064,22 +1049,38 @@ export default function InterviewContainer({
               </div>
               <div className="flex flex-column gap-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="text-sm font-semibold leading-6 text-gray-900">
-                    Interview Link
-                  </label>
-                  <a
-                    target="_blank"
-                    href="https://meet.google.com/"
-                    rel="noopener noreferrer"
+                  <div className="flex align-items-center gap-2">
+                    <img
+                      src={
+                        interviewType === "Google Meet"
+                          ? "/layout/google_meet_icon_short.png"
+                          : "/layout/kasambahayko_logo.png"
+                      }
+                      alt="Sakai Logo"
+                      height={interviewType === "Google Meet" ? "20" : "20"}
+                      width={interviewType === "Google Meet" ? "20" : "20"}
+                      className="user-avatar mr-0 lg:mr-2"
+                    />
+                    <label className="text-sm font-semibold leading-6 text-gray-900">
+                      Interview type
+                    </label>
+                  </div>
+
+                  <span
+                    className="cursor-pointer"
+                    onClick={() => handleInterviewTypeChange()}
                   >
-                    <i className="pi pi-video" />
-                  </a>
+                    <i className="pi pi-arrow-right-arrow-left" />
+                  </span>
                 </div>
                 <span className="p-input-icon-left">
                   <i className="pi pi-link" />
                   <InputText
+                    value={interviewLink}
                     placeholder=""
                     onChange={(e) => setInterviewLink(e.target.value)}
+                    // disabled if interview type is kasambahayko because link is auto generated
+                    disabled={interviewType === "KasambahayKo"}
                   />
                 </span>
               </div>
